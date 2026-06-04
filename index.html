@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Deriv Super Bot v3</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; margin: 0; padding: 16px; color: #111; }
+  h1 { font-size: 20px; font-weight: 500; margin: 0; }
+  .badge { font-size: 12px; padding: 4px 12px; border-radius: 8px; background: #e5e5e5; border: 0.5px solid #ccc; color: #555; }
+  .metric { background: #ececec; border-radius: 8px; padding: 12px 14px; }
+  .metric p { margin: 0; }
+  .section-card { background: #fff; border: 0.5px solid #ddd; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  label { font-size: 12px; color: #555; display: block; margin-bottom: 4px; }
+  input[type=text], input[type=password], input[type=number], select {
+    width: 100%; padding: 8px 10px; border: 0.5px solid #ccc; border-radius: 8px;
+    font-size: 13px; background: #fff; color: #111; outline: none;
+  }
+  input:focus, select:focus { border-color: #378ADD; box-shadow: 0 0 0 2px rgba(55,138,221,0.15); }
+  button {
+    padding: 10px 16px; font-size: 14px; font-weight: 500; border-radius: 8px;
+    border: 0.5px solid #ccc; background: transparent; cursor: pointer; color: #111;
+    transition: background 0.15s;
+  }
+  button:hover { background: #ececec; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .tab-btn { padding: 7px 16px; font-size: 13px; border-radius: 8px; border: 0.5px solid #ddd; background: transparent; cursor: pointer; color: #555; }
+  .tab-btn.active { background: #e6f1fb; color: #185FA5; border-color: #85B7EB; }
+  .digit-bar { display: inline-block; width: 22px; border-radius: 3px 3px 0 0; background: #85B7EB; transition: height 0.3s; vertical-align: bottom; }
+  .log-line { font-size: 12px; font-family: monospace; line-height: 1.8; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 1rem; }
+  .flex-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .flex-row button { flex: 1; min-width: 110px; }
+  .info-box { background: #e6f1fb; border: 0.5px solid #85B7EB; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #185FA5; margin-bottom: 1rem; line-height: 1.7; }
+  .error-box { background: #FCEBEB; border: 0.5px solid #F09595; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #A32D2D; margin-bottom: 1rem; line-height: 1.7; display:none; }
+  @media (max-width: 480px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div style="max-width:720px; margin:0 auto;">
+
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:8px;">
+  <div>
+    <h1>Deriv super bot v3</h1>
+    <p style="font-size:12px; color:#777; margin:3px 0 0;">Smart analysis · Auto-switch · Martingale recovery</p>
+  </div>
+  <span id="status-badge" class="badge">Disconnected</span>
+</div>
+
+<div class="grid-metrics">
+  <div class="metric"><p style="font-size:11px;color:#777;">Balance</p><p style="font-size:20px;font-weight:500;" id="d-balance">$0.00</p></div>
+  <div class="metric"><p style="font-size:11px;color:#777;">Stake</p><p style="font-size:20px;font-weight:500;" id="d-stake">$0.35</p></div>
+  <div class="metric"><p style="font-size:11px;color:#777;">Profit today</p><p style="font-size:20px;font-weight:500;" id="d-profit">$0.00</p></div>
+  <div class="metric"><p style="font-size:11px;color:#777;">Win rate</p><p style="font-size:20px;font-weight:500;" id="d-wr">0%</p></div>
+  <div class="metric"><p style="font-size:11px;color:#777;">W / L</p><p style="font-size:20px;font-weight:500;" id="d-wl"><span style="color:#1D9E75">0</span>/<span style="color:#E24B4A">0</span></p></div>
+  <div class="metric"><p style="font-size:11px;color:#777;">Streak</p><p style="font-size:20px;font-weight:500;" id="d-streak"><span style="color:#E24B4A">0</span>/3</p></div>
+</div>
+
+<div style="display:flex; gap:6px; margin-bottom:1rem; flex-wrap:wrap;">
+  <button class="tab-btn active" onclick="showTab('setup',this)">Setup</button>
+  <button class="tab-btn" onclick="showTab('analysis',this)">Digit analysis</button>
+  <button class="tab-btn" onclick="showTab('chart',this)">P&L chart</button>
+  <button class="tab-btn" onclick="showTab('log',this)">Log</button>
+</div>
+
+<!-- SETUP TAB -->
+<div id="tab-setup">
+
+  <div class="info-box">
+    &#9432; <strong>First time?</strong> Get your App ID from <a href="https://api.deriv.com" target="_blank" style="color:#185FA5;">api.deriv.com</a> → Register application. Use your Netlify URL as the OAuth redirect URL. Then get your API token from <a href="https://app.deriv.com/account/api-token" target="_blank" style="color:#185FA5;">app.deriv.com → API token</a> (enable Read + Trade).
+  </div>
+
+  <div id="error-box" class="error-box"></div>
+
+  <div class="section-card">
+    <p style="font-size:13px;font-weight:500;margin:0 0 10px;">Connection</p>
+    <div class="grid-2">
+      <div>
+        <label>Deriv App ID</label>
+        <input type="text" id="app-id" placeholder="e.g. 12345" />
+        <p style="font-size:11px;color:#999;margin:4px 0 0;">From api.deriv.com</p>
+      </div>
+      <div>
+        <label>Account type</label>
+        <select id="account-type" style="margin-top:0;">
+          <option value="demo">Demo account</option>
+          <option value="real">Real account</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <label>API token</label>
+      <input type="password" id="api-token" placeholder="Paste your API token here" />
+      <p style="font-size:11px;color:#999;margin:4px 0 0;">From app.deriv.com → Security & Safety → API token (Read + Trade permissions)</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="section-card">
+      <p style="font-size:13px;font-weight:500;margin:0 0 10px;">Market & type</p>
+      <label>Market</label>
+      <select id="market">
+        <option value="R_25">Volatility 25</option>
+        <option value="R_75" selected>Volatility 75</option>
+        <option value="R_100">Volatility 100</option>
+      </select>
+      <div style="margin-top:8px;">
+        <label>Trade type</label>
+        <select id="trade-type">
+          <option value="AUTO">Auto-switch (smart)</option>
+          <option value="DIGITOVER">Over</option>
+          <option value="DIGITUNDER">Under</option>
+          <option value="DIGITEVEN">Even</option>
+          <option value="DIGITODD">Odd</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-card">
+      <p style="font-size:13px;font-weight:500;margin:0 0 10px;">Trade parameters</p>
+      <label>Base stake ($)</label>
+      <input type="number" id="base-stake" value="0.35" min="0.35" step="0.01" />
+      <div style="margin-top:8px;">
+        <label>Digit (for Over/Under manual)</label>
+        <input type="number" id="digit" value="5" min="0" max="9" />
+      </div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <p style="font-size:13px;font-weight:500;margin:0 0 10px;">Safety & limits</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">
+      <div>
+        <label>Ticks per trade</label>
+        <select id="ticks">
+          <option value="1" selected>1 tick</option>
+          <option value="2">2 ticks</option>
+          <option value="3">3 ticks</option>
+          <option value="5">5 ticks</option>
+        </select>
+      </div>
+      <div>
+        <label>Analysis ticks (N)</label>
+        <input type="number" id="analysis-n" value="20" min="5" max="100" />
+      </div>
+      <div>
+        <label>Profit target ($)</label>
+        <input type="number" id="profit-target" value="5" min="0.1" step="0.1" />
+      </div>
+      <div>
+        <label>Daily loss limit ($)</label>
+        <input type="number" id="loss-limit" value="3" min="0.1" step="0.1" />
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="sound-on" checked style="width:16px;height:16px;" /> Sound alerts on win/loss
+      </label>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:#777;display:flex;gap:16px;flex-wrap:wrap;">
+      <span>&#x26F2; Min balance: <strong style="color:#111;">$7.00</strong></span>
+      <span>&#x21BA; Max streak: <strong style="color:#111;">3 losses</strong></span>
+      <span>&#x2197; Recovery: <strong style="color:#111;">Martingale x2</strong></span>
+    </div>
+  </div>
+
+  <div class="flex-row">
+    <button id="connect-btn" onclick="connectBot()">&#x1F50C; Connect</button>
+    <button id="start-btn" onclick="startBot()" disabled style="color:#1D9E75;">&#9654; Start bot</button>
+    <button id="stop-btn" onclick="stopBot()" disabled style="color:#E24B4A;">&#9632; Stop bot</button>
+  </div>
+</div>
+
+<!-- ANALYSIS TAB -->
+<div id="tab-analysis" style="display:none;">
+  <div class="section-card">
+    <p style="font-size:13px;font-weight:500;margin:0 0 4px;">Last digit frequency (last <span id="n-label">20</span> ticks)</p>
+    <p style="font-size:12px;color:#777;margin:0 0 12px;">Bot auto-picks the digit and type with highest edge.</p>
+    <div style="display:flex;align-items:flex-end;gap:6px;height:110px;">
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar0"></div><div style="font-size:11px;color:#777;margin-top:3px;">0</div><div style="font-size:10px;color:#aaa;" id="pct0">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar1"></div><div style="font-size:11px;color:#777;margin-top:3px;">1</div><div style="font-size:10px;color:#aaa;" id="pct1">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar2"></div><div style="font-size:11px;color:#777;margin-top:3px;">2</div><div style="font-size:10px;color:#aaa;" id="pct2">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar3"></div><div style="font-size:11px;color:#777;margin-top:3px;">3</div><div style="font-size:10px;color:#aaa;" id="pct3">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar4"></div><div style="font-size:11px;color:#777;margin-top:3px;">4</div><div style="font-size:10px;color:#aaa;" id="pct4">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar5"></div><div style="font-size:11px;color:#777;margin-top:3px;">5</div><div style="font-size:10px;color:#aaa;" id="pct5">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar6"></div><div style="font-size:11px;color:#777;margin-top:3px;">6</div><div style="font-size:10px;color:#aaa;" id="pct6">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar7"></div><div style="font-size:11px;color:#777;margin-top:3px;">7</div><div style="font-size:10px;color:#aaa;" id="pct7">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar8"></div><div style="font-size:11px;color:#777;margin-top:3px;">8</div><div style="font-size:10px;color:#aaa;" id="pct8">0%</div></div>
+      <div style="text-align:center;"><div class="digit-bar" style="height:40px;" id="bar9"></div><div style="font-size:11px;color:#777;margin-top:3px;">9</div><div style="font-size:10px;color:#aaa;" id="pct9">0%</div></div>
+    </div>
+  </div>
+  <div class="section-card">
+    <p style="font-size:13px;font-weight:500;margin:0 0 8px;">Smart recommendation</p>
+    <div id="recommendation" style="font-size:13px;color:#777;">Connect to market to see live recommendation.</div>
+  </div>
+  <div class="section-card">
+    <p style="font-size:13px;font-weight:500;margin:0 0 8px;">Even / Odd split</p>
+    <div style="display:flex;gap:12px;">
+      <div style="flex:1;background:#EAF3DE;border-radius:8px;padding:8px;text-align:center;">
+        <p style="font-size:12px;color:#3B6D11;margin:0;">Even</p>
+        <p style="font-size:18px;font-weight:500;color:#3B6D11;margin:0;" id="even-pct">0%</p>
+      </div>
+      <div style="flex:1;background:#FAEEDA;border-radius:8px;padding:8px;text-align:center;">
+        <p style="font-size:12px;color:#854F0B;margin:0;">Odd</p>
+        <p style="font-size:18px;font-weight:500;color:#854F0B;margin:0;" id="odd-pct">0%</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CHART TAB -->
+<div id="tab-chart" style="display:none;">
+  <div class="section-card">
+    <p style="font-size:13px;font-weight:500;margin:0 0 4px;">P&L per trade</p>
+    <div style="position:relative;width:100%;height:220px;">
+      <canvas id="pnl-chart" role="img" aria-label="Profit and loss per trade">No trades yet.</canvas>
+    </div>
+  </div>
+  <div class="section-card">
+    <p style="font-size:13px;font-weight:500;margin:0 0 4px;">Cumulative balance</p>
+    <div style="position:relative;width:100%;height:220px;">
+      <canvas id="balance-chart" role="img" aria-label="Cumulative balance over trades">No trades yet.</canvas>
+    </div>
+  </div>
+</div>
+
+<!-- LOG TAB -->
+<div id="tab-log" style="display:none;">
+  <div class="section-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <p style="font-size:13px;font-weight:500;margin:0;">Trade log</p>
+      <button onclick="clearLog()" style="font-size:12px;padding:4px 10px;">Clear</button>
+    </div>
+    <div id="log" style="max-height:350px;overflow-y:auto;"><span style="font-size:12px;color:#aaa;">Waiting for connection...</span></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+let ws=null,botRunning=false,balance=0,currentStake=0,baseStake=0;
+let wins=0,losses=0,lossStreak=0,waitingResult=false,contractId=null;
+let dailyProfit=0,tickHistory=[],tradeHistory=[],balanceHistory=[];
+let pnlChart=null,balChart=null;
+const MIN_BAL=7,MAX_STREAK=3;
+
+function showTab(name,btn){
+  ['setup','analysis','chart','log'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display=t===name?'block':'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(name==='chart') renderCharts();
+}
+
+function showError(msg){
+  const el=document.getElementById('error-box');
+  el.style.display='block';
+  el.innerHTML='&#9888; <strong>Connection error:</strong> '+msg;
+}
+
+function hideError(){
+  document.getElementById('error-box').style.display='none';
+}
+
+function log(msg,color){
+  const el=document.getElementById('log');
+  const line=document.createElement('div');
+  line.className='log-line';
+  line.style.color=color||'#555';
+  line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;
+  el.appendChild(line);
+  el.scrollTop=el.scrollHeight;
+}
+
+function clearLog(){ document.getElementById('log').innerHTML=''; }
+
+function updateMetrics(){
+  document.getElementById('d-balance').textContent='$'+balance.toFixed(2);
+  document.getElementById('d-stake').textContent='$'+currentStake.toFixed(2);
+  const pp=document.getElementById('d-profit');
+  pp.textContent=(dailyProfit>=0?'+':'')+'$'+dailyProfit.toFixed(2);
+  pp.style.color=dailyProfit>=0?'#1D9E75':'#E24B4A';
+  const total=wins+losses;
+  document.getElementById('d-wr').textContent=total?Math.round(wins/total*100)+'%':'0%';
+  document.getElementById('d-wl').innerHTML='<span style="color:#1D9E75">'+wins+'</span>/<span style="color:#E24B4A">'+losses+'</span>';
+  document.getElementById('d-streak').innerHTML='<span style="color:#E24B4A">'+lossStreak+'</span>/3';
+}
+
+function playSound(win){
+  if(!document.getElementById('sound-on').checked) return;
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);
+    o.frequency.value=win?880:220;
+    o.type=win?'sine':'sawtooth';
+    g.gain.setValueAtTime(0.3,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+    o.start();o.stop(ctx.currentTime+0.4);
+  }catch(e){}
+}
+
+function analyzeDigits(){
+  const n=parseInt(document.getElementById('analysis-n').value)||20;
+  document.getElementById('n-label').textContent=n;
+  const recent=tickHistory.slice(-n);
+  if(!recent.length) return{type:'DIGITOVER',digit:4};
+  const counts=Array(10).fill(0);
+  recent.forEach(d=>counts[d]++);
+  const max=Math.max(...counts),maxH=80;
+  let evenCount=0,oddCount=0;
+  counts.forEach((c,i)=>{ if(i%2===0) evenCount+=c; else oddCount+=c; });
+  document.getElementById('even-pct').textContent=Math.round(evenCount/recent.length*100)+'%';
+  document.getElementById('odd-pct').textContent=Math.round(oddCount/recent.length*100)+'%';
+  for(let i=0;i<10;i++){
+    const pct=recent.length?Math.round(counts[i]/recent.length*100):0;
+    const h=max?Math.round(counts[i]/max*maxH)+8:8;
+    document.getElementById('bar'+i).style.height=h+'px';
+    document.getElementById('bar'+i).style.background=counts[i]===max?'#185FA5':'#85B7EB';
+    document.getElementById('pct'+i).textContent=pct+'%';
+  }
+  const minDigit=counts.indexOf(Math.min(...counts));
+  let rec,recType,recDigit;
+  if(evenCount>oddCount*1.1){ recType='DIGITODD';recDigit=null;rec='Odd (even dominating at '+Math.round(evenCount/recent.length*100)+'%)'; }
+  else if(oddCount>evenCount*1.1){ recType='DIGITEVEN';recDigit=null;rec='Even (odd dominating at '+Math.round(oddCount/recent.length*100)+'%)'; }
+  else if(minDigit<=3){ recType='DIGITOVER';recDigit=minDigit;rec='Over '+minDigit+' (digit '+minDigit+' least frequent)'; }
+  else{ recType='DIGITUNDER';recDigit=minDigit;rec='Under '+minDigit+' (digit '+minDigit+' least frequent)'; }
+  document.getElementById('recommendation').innerHTML='<strong>Suggested: </strong>'+rec;
+  return{type:recType,digit:recDigit};
+}
+
+function getTradeParams(){
+  const manual=document.getElementById('trade-type').value;
+  if(manual!=='AUTO') return{type:manual,digit:parseInt(document.getElementById('digit').value)};
+  return analyzeDigits();
+}
+
+function renderCharts(){
+  if(!window.Chart) return;
+  const labels=tradeHistory.map((_,i)=>'T'+(i+1));
+  const pnlData=tradeHistory.map(t=>t.pnl);
+  const pnlColors=pnlData.map(v=>v>=0?'#1D9E75':'#E24B4A');
+  if(pnlChart) pnlChart.destroy();
+  if(balChart) balChart.destroy();
+  const ctx1=document.getElementById('pnl-chart').getContext('2d');
+  pnlChart=new Chart(ctx1,{
+    type:'bar',
+    data:{labels,datasets:[{label:'P&L',data:pnlData,backgroundColor:pnlColors,borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+v.toFixed(2)},grid:{color:'rgba(0,0,0,0.06)'}},x:{ticks:{autoSkip:true,maxTicksLimit:12},grid:{display:false}}}}
+  });
+  const ctx2=document.getElementById('balance-chart').getContext('2d');
+  balChart=new Chart(ctx2,{
+    type:'line',
+    data:{labels,datasets:[{label:'Balance',data:balanceHistory,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.08)',tension:0.3,pointRadius:2,fill:true}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'$'+v.toFixed(2)},grid:{color:'rgba(0,0,0,0.06)'}},x:{ticks:{autoSkip:true,maxTicksLimit:12},grid:{display:false}}}}
+  });
+}
+
+function connectBot(){
+  hideError();
+  const token=document.getElementById('api-token').value.trim();
+  const appId=document.getElementById('app-id').value.trim();
+  if(!appId){ showError('Please enter your App ID from api.deriv.com'); return; }
+  if(!appId.match(/^\d+$/)){ showError('App ID must be a number only (e.g. 12345)'); return; }
+  if(!token){ showError('Please enter your API token from app.deriv.com'); return; }
+  if(token.length < 10){ showError('API token looks too short. Please check and re-paste it.'); return; }
+
+  baseStake=parseFloat(document.getElementById('base-stake').value)||0.35;
+  currentStake=baseStake;
+
+  const wsUrl='wss://ws.binaryws.com/websockets/v3?app_id='+appId;
+  log('Connecting to: '+wsUrl);
+
+  try{
+    ws=new WebSocket(wsUrl);
+  }catch(e){
+    showError('Could not open WebSocket: '+e.message);
+    return;
+  }
+
+  ws.onopen=()=>{
+    log('WebSocket open. Authorizing...','#378ADD');
+    ws.send(JSON.stringify({authorize:token}));
+  };
+
+  ws.onmessage=e=>handleMessage(JSON.parse(e.data));
+
+  ws.onerror=(e)=>{
+    log('WebSocket error. Check your App ID and internet connection.','#E24B4A');
+    showError('WebSocket failed to connect. Make sure your App ID is correct and your Netlify URL is set as the OAuth redirect URL in api.deriv.com.');
+  };
+
+  ws.onclose=(e)=>{
+    log('Disconnected. Code: '+e.code+' Reason: '+(e.reason||'none'));
+    setBadge('Disconnected','#e5e5e5','#555');
+    document.getElementById('start-btn').disabled=true;
+    botRunning=false;
+  };
+}
+
+function setBadge(txt,bg,color){
+  const b=document.getElementById('status-badge');
+  b.textContent=txt; b.style.background=bg; b.style.color=color;
+}
+
+function handleMessage(data){
+  if(data.msg_type==='authorize'){
+    if(data.error){
+      log('Auth failed: '+data.error.message,'#E24B4A');
+      showError('Token rejected: '+data.error.message+'. Make sure your token has Read and Trade permissions.');
+      return;
+    }
+    balance=parseFloat(data.authorize.balance);
+    updateMetrics();
+    log('Authorized as: '+data.authorize.loginid+' | Balance: $'+balance.toFixed(2),'#1D9E75');
+    setBadge('Connected ('+document.getElementById('account-type').value+')','#EAF3DE','#3B6D11');
+    hideError();
+    document.getElementById('start-btn').disabled=false;
+    ws.send(JSON.stringify({balance:1,subscribe:1}));
+    ws.send(JSON.stringify({ticks:document.getElementById('market').value,subscribe:1}));
+  }
+  if(data.msg_type==='balance'){
+    balance=parseFloat(data.balance.balance);
+    updateMetrics();
+  }
+  if(data.msg_type==='tick'){
+    const price=data.tick.quote.toString();
+    const lastDigit=parseInt(price[price.length-1]);
+    tickHistory.push(lastDigit);
+    if(tickHistory.length>200) tickHistory.shift();
+    if(document.getElementById('tab-analysis').style.display!=='none') analyzeDigits();
+  }
+  if(data.msg_type==='buy'){
+    if(data.error){ log('Buy error: '+data.error.message,'#E24B4A'); waitingResult=false; return; }
+    contractId=data.buy.contract_id;
+    log('Trade placed — ID:'+contractId+' | Stake: $'+currentStake.toFixed(2),'#378ADD');
+    ws.send(JSON.stringify({proposal_open_contract:1,contract_id:contractId,subscribe:1}));
+  }
+  if(data.msg_type==='proposal_open_contract'){
+    const c=data.proposal_open_contract;
+    if(c.is_settled||c.status==='won'||c.status==='lost'){
+      waitingResult=false;
+      const pnl=c.status==='won'?parseFloat(c.profit):-currentStake;
+      dailyProfit=parseFloat((dailyProfit+pnl).toFixed(2));
+      tradeHistory.push({pnl});
+      balanceHistory.push(parseFloat(balance.toFixed(2)));
+      if(c.status==='won'){
+        wins++;lossStreak=0;currentStake=baseStake;
+        log('WIN  +$'+parseFloat(c.profit).toFixed(2),'#1D9E75');
+        playSound(true);
+        const pt=parseFloat(document.getElementById('profit-target').value);
+        if(dailyProfit>=pt){ log('Profit target $'+pt.toFixed(2)+' reached! Bot stopped.','#1D9E75'); stopBot(); return; }
+      } else {
+        losses++;lossStreak++;
+        log('LOSS -$'+currentStake.toFixed(2)+' | Streak: '+lossStreak,'#E24B4A');
+        playSound(false);
+        const ll=parseFloat(document.getElementById('loss-limit').value);
+        if(Math.abs(dailyProfit)>=ll&&dailyProfit<0){ log('Daily loss limit $'+ll.toFixed(2)+' hit! Bot stopped.','#E24B4A'); stopBot(); return; }
+        if(lossStreak>=MAX_STREAK){ log('Max 3-loss streak reached. Bot stopped.','#E24B4A'); stopBot(); return; }
+        currentStake=parseFloat((currentStake*2).toFixed(2));
+        log('Martingale: next stake = $'+currentStake.toFixed(2),'#BA7517');
+      }
+      updateMetrics();
+      if(botRunning){
+        if(balance<MIN_BAL){ log('Balance below $7 minimum. Stopped.','#E24B4A'); stopBot(); return; }
+        setTimeout(placeTrade,1800);
+      }
+    }
+  }
+}
+
+function placeTrade(){
+  if(!botRunning||!ws||waitingResult) return;
+  const params=getTradeParams();
+  const market=document.getElementById('market').value;
+  const ticks=parseInt(document.getElementById('ticks').value);
+  const payload={
+    buy:1,price:currentStake,
+    parameters:{
+      amount:currentStake,basis:'stake',
+      contract_type:params.type,
+      currency:'USD',
+      duration:ticks,duration_unit:'t',
+      symbol:market
+    }
+  };
+  if(params.type==='DIGITOVER'||params.type==='DIGITUNDER'){
+    payload.parameters.barrier=params.digit!=null?params.digit.toString():document.getElementById('digit').value.toString();
+  }
+  waitingResult=true;
+  ws.send(JSON.stringify(payload));
+}
+
+function startBot(){
+  if(!ws||ws.readyState!==1){ showError('Not connected. Click Connect first.'); return; }
+  if(balance<MIN_BAL){ showError('Balance is below the $7 minimum required to start.'); return; }
+  botRunning=true;currentStake=baseStake;lossStreak=0;
+  document.getElementById('start-btn').disabled=true;
+  document.getElementById('stop-btn').disabled=false;
+  log('Bot started.','#1D9E75');
+  placeTrade();
+}
+
+function stopBot(){
+  botRunning=false;waitingResult=false;
+  document.getElementById('start-btn').disabled=false;
+  document.getElementById('stop-btn').disabled=true;
+  log('Bot stopped.');
+}
+</script>
+</body>
+</html>
