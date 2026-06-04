@@ -364,7 +364,7 @@ function connectBot(){
   const token=document.getElementById('api-token').value.trim();
   const appId=document.getElementById('app-id').value.trim();
   if(!appId){ showError('Please enter your App ID from api.deriv.com'); return; }
-  if(!appId.match(/^\d+$/)){ showError('App ID must be a number only (e.g. 12345)'); return; }
+  
   if(!token){ showError('Please enter your API token from app.deriv.com'); return; }
   if(token.length < 10){ showError('API token looks too short. Please check and re-paste it.'); return; }
 
